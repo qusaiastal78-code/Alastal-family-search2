@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from PIL import Image
 import os
+import io
 
 # --- إعدادات الصفحة ---
 st.set_page_config(
@@ -18,16 +19,15 @@ st.markdown("""
         direction: rtl;
         text-align: right;
     }
-    h1, h2, h3, p, div, input, label, .stTextInput > label {
-        font-family: 'Tajawal', sans-serif;
+    /* تطبيق خطوط عربية حديثة على جميع العناصر النصية */
+    h1, h2, h3, h4, p, div, input, label, .stTextInput > label, 
+    div[data-testid="stCaptionContainer"], table, th, td {
+        font-family: 'Tahoma', 'Arial', sans-serif;
         text-align: right;
         width: 100%;
     }
     .stAlert {
         direction: rtl;
-        text-align: right;
-    }
-    div[data-testid="stCaptionContainer"] {
         text-align: right;
     }
     /* تنسيق الجدول */
@@ -55,57 +55,60 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- تحميل البيانات (نسخة قوية تتجاهل الأخطاء) ---
+# --- تحميل ومعالجة البيانات ---
 @st.cache_data
 def load_data():
+    """
+    تحميل الملف بطريقة مرنة لحل مشاكل الترميز وتسمية الأعمدة (KeyError).
+    """
     df = None
+    # قائمة بالتشفيرات المحتملة للملفات العربية
     encodings_to_try = ['utf-8', 'utf-8-sig', 'windows-1256', 'iso-8859-6']
+    file_name = "data.csv" # الاسم المتوقع للملف
     
+    # 1. محاولة قراءة الملف بالترميزات المختلفة
     for encoding in encodings_to_try:
         try:
-            # on_bad_lines='skip': لتجاهل الأسطر التي بها عدد أعمدة خاطئ
-            # engine='python': محرك أكثر مرونة في قراءة الملفات المعقدة
+            # استخدام محرك بايثون لتجاهل الأسطر المعيبة
             df = pd.read_csv(
-                "data.csv", 
+                file_name, 
                 encoding=encoding, 
                 on_bad_lines='skip', 
                 engine='python' 
             )
             break
-        except UnicodeDecodeError:
+        except Exception: 
             continue
-        except Exception as e:
-            st.error(f"حدث خطأ غير متوقع مع الترميز {encoding}: {e}")
-            return None
             
     if df is None:
-        st.error("فشل قراءة الملف بجميع الترميزات. تأكد من سلامة ملف data.csv")
+        st.error("فشل قراءة الملف بجميع الترميزات. يرجى التأكد من سلامة ملف data.csv")
         return None
 
     try:
-        # تنظيف أسماء الأعمدة
-        df.columns = df.columns.str.replace('\n', ' ').str.strip()
+        # 2. تنظيف أسماء الأعمدة وحل مشكلة KeyError
         
-        # تحويل رقم الهوية إلى نص
-        if 'رقم الهوية' in df.columns:
-            df['رقم الهوية'] = df['رقم الهوية'].astype(str).str.replace('.0', '', regex=False)
-            
-        return df
-    except Exception as e:
-        st.error(f"حدث خطأ أثناء معالجة البيانات: {e}")
-        return None
-            
-    if df is None:
-        st.error("فشل قراءة الملف بجميع الترميزات المعروفة. يرجى التأكد من حفظ الملف بصيغة CSV UTF-8")
-        return None
+        # تنظيف شامل لإزالة المسافات والأسطر الجديدة من جميع أسماء الأعمدة
+        df.columns = df.columns.astype(str).str.replace('\n', ' ').str.strip()
+        
+        # البحث عن عمود الهوية بالكلمة المفتاحية 'هوية' أو 'الهوية'
+        id_column_name = None
+        for col in df.columns:
+            if 'هوية' in col or 'الهوية' in col:
+                id_column_name = col
+                break
+        
+        if id_column_name is None:
+             st.error("لم يتم العثور على أي عمود يحتوي على كلمة 'هوية' في ملف البيانات. تأكد أن العنوان مكتوب بشكل واضح.")
+             return None
 
-    try:
-        # تنظيف أسماء الأعمدة
-        df.columns = df.columns.str.replace('\n', ' ').str.strip()
+        # إعادة تسمية العمود الذي وجدناه إلى 'رقم الهوية' ليتطابق مع باقي الكود
+        if id_column_name != 'رقم الهوية':
+             df.rename(columns={id_column_name: 'رقم الهوية'}, inplace=True)
         
-        # تحويل رقم الهوية إلى نص
-        if 'رقم الهوية' in df.columns:
-            df['رقم الهوية'] = df['رقم الهوية'].astype(str).str.replace('.0', '', regex=False)
+        # 3. معالجة البيانات
+        
+        # التأكد من تحويل رقم الهوية إلى نص وإزالة أي فواصل عشرية (مثل .0)
+        df['رقم الهوية'] = df['رقم الهوية'].astype(str).str.replace('.0', '', regex=False).str.strip()
             
         return df
     except Exception as e:
@@ -123,7 +126,8 @@ with col1:
         image = Image.open(logo_path)
         st.image(image, width=110)
     else:
-        st.write("شعار العائلة")
+        # استخدام placeholder في حالة عدم وجود الصورة
+        st.markdown('<div style="text-align:center; height:110px; line-height:110px; border: 1px solid #ccc;">شعار العائلة</div>', unsafe_allow_html=True)
 
 with col2:
     st.title("مجلس عائلة الأسطل")
@@ -133,22 +137,22 @@ st.markdown("---")
 
 # --- واجهة البحث ---
 st.markdown("#### 🔎 أدخل رقم الهوية للبحث:")
-id_query = st.text_input("رقم الهوية", placeholder="مثال: 80xxxxxxx", label_visibility="collapsed")
+id_query = st.text_input("رقم الهوية", placeholder="مثال: 80xxxxxxx", label_visibility="collapsed").strip()
 
-# تحديد الأعمدة المطلوبة للعرض مع أسمائها المحسنة
+# تحديد الأعمدة المطلوبة للعرض مع أسمائها المحسنة في الواجهة
 columns_mapping = {
     'رقم الهوية': 'رقم الهوية',
-    'الاسم': 'الاسم الرباعي',
+    'الاسم': 'الاسم الكامل',
     'رقم الهاتف': 'رقم الجوال',
     'الفرع': 'الفرع',
     'الحالة الاجتماعية': 'الحالة الاجتماعية',
     'عدد افراد الاسرة': 'عدد الأفراد',
-    'هوية الزوجة 1': 'هوية الزوج/ة'
+    'هوية الزوجة 1': 'هوية الزوج/ة الأولى'
 }
 
 if id_query:
     if df is not None:
-        # البحث
+        # البحث في عمود 'رقم الهوية'
         result = df[df['رقم الهوية'] == id_query]
         
         if not result.empty:
@@ -159,20 +163,34 @@ if id_query:
             display_data = {}
             missing_fields = []
             
+            # الأعمدة الأساسية التي يجب أن تكون موجودة ولا تُعتبر اختيارية
+            required_fields = ['الاسم', 'رقم الهاتف', 'الفرع', 'الحالة الاجتماعية', 'عدد افراد الاسرة']
+            
             for col_db, col_display in columns_mapping.items():
+                # نتأكد من وجود العمود في بيانات الـ DataFrame
                 if col_db in df.columns:
                     val = row[col_db]
+                    
+                    # نستخدم اسم العمود الذي تم إعادة تسميته إذا كان هو عمود الهوية
+                    if col_db == 'رقم الهوية':
+                        display_data[col_display] = row['رقم الهوية']
+                        continue
+
                     display_data[col_display] = val
                     
-                    # التحقق من النواقص (استثناء هوية الزوج/ة إذا كان الشخص أعزب مثلاً يمكن تعديل الشرط)
-                    # هنا نعتبر أي خانة فارغة نقصاً، عدا هوية الزوجة قد تكون اختيارية حسب الحالة
-                    if pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan":
-                         # نعتبر الفرع ورقم الهاتف والاسم أساسيات
-                         if col_db in ['الفرع', 'رقم الهاتف', 'الاسم', 'الحالة الاجتماعية']:
-                             missing_fields.append(col_display)
-            
+                    # التحقق من النواقص للبيانات الأساسية فقط
+                    is_missing = pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan"
+                    
+                    if is_missing and col_db in required_fields:
+                         missing_fields.append(col_display)
+                elif col_db in required_fields:
+                    # إذا كان العمود الأساسي مفقوداً من الملف أصلاً
+                    missing_fields.append(col_display)
+
+
             # عرض الجدول بشكل عمودي منسق
-            st.table(pd.DataFrame(display_data.items(), columns=['البيان', 'القيمة']))
+            data_to_display = pd.DataFrame(display_data.items(), columns=['البيان', 'القيمة'])
+            st.table(data_to_display)
             
             # --- التنبيه عند نقص البيانات ---
             if missing_fields:
@@ -182,7 +200,7 @@ if id_query:
                     <p style="color: #555; font-size:16px;">يرجى استكمال البيانات التالية: <b>{', '.join(missing_fields)}</b></p>
                     <hr>
                     <p style="color: #333; font-weight: bold;">
-                        يرجى سرعة التواصل مع السيد/ م. أيمن ناجي الأسطل<br>
+                        يرجى سرعة التواصل مع <strong style="color:#004d00;">السيد/ م. أيمن ناجي الأسطل</strong><br>
                         لتزويده بالبيانات الناقصة لإكمال السجل.
                     </p>
                 </div>
@@ -196,12 +214,10 @@ if id_query:
 # --- مسافة فارغة للفوتر ---
 st.write("<br><br><br>", unsafe_allow_html=True)
 
-# --- الفوتر ---
+# --- الفوتر (حقوق الملكية) ---
 st.markdown("""
     <div class="footer">
         جميع الحقوق محفوظة لمجلس عائلة الأسطل © 2025<br>
         تم إنشاء وتطوير هذا الموقع بواسطة: <strong style="color:#004d00;">السيد قصي صبحي الأسطل</strong>
     </div>
-
     """, unsafe_allow_html=True)
-
