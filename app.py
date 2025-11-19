@@ -55,24 +55,45 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- تحميل البيانات (نسخة معدلة لحل مشكلة الترميز) ---
+# --- تحميل البيانات (نسخة قوية تتجاهل الأخطاء) ---
 @st.cache_data
 def load_data():
     df = None
-    # قائمة بالتشفيرات المحتملة للملفات العربية
     encodings_to_try = ['utf-8', 'utf-8-sig', 'windows-1256', 'iso-8859-6']
     
     for encoding in encodings_to_try:
         try:
-            # نحاول قراءة الملف
-            df = pd.read_csv("data.csv", encoding=encoding)
-            # إذا نجحت القراءة، نوقف المحاولات
+            # on_bad_lines='skip': لتجاهل الأسطر التي بها عدد أعمدة خاطئ
+            # engine='python': محرك أكثر مرونة في قراءة الملفات المعقدة
+            df = pd.read_csv(
+                "data.csv", 
+                encoding=encoding, 
+                on_bad_lines='skip', 
+                engine='python' 
+            )
             break
         except UnicodeDecodeError:
             continue
         except Exception as e:
-            st.error(f"حدث خطأ غير متوقع: {e}")
+            st.error(f"حدث خطأ غير متوقع مع الترميز {encoding}: {e}")
             return None
+            
+    if df is None:
+        st.error("فشل قراءة الملف بجميع الترميزات. تأكد من سلامة ملف data.csv")
+        return None
+
+    try:
+        # تنظيف أسماء الأعمدة
+        df.columns = df.columns.str.replace('\n', ' ').str.strip()
+        
+        # تحويل رقم الهوية إلى نص
+        if 'رقم الهوية' in df.columns:
+            df['رقم الهوية'] = df['رقم الهوية'].astype(str).str.replace('.0', '', regex=False)
+            
+        return df
+    except Exception as e:
+        st.error(f"حدث خطأ أثناء معالجة البيانات: {e}")
+        return None
             
     if df is None:
         st.error("فشل قراءة الملف بجميع الترميزات المعروفة. يرجى التأكد من حفظ الملف بصيغة CSV UTF-8")
@@ -183,3 +204,4 @@ st.markdown("""
     </div>
 
     """, unsafe_allow_html=True)
+
