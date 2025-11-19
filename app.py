@@ -55,24 +55,40 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- تحميل البيانات ---
+# --- تحميل البيانات (نسخة معدلة لحل مشكلة الترميز) ---
 @st.cache_data
 def load_data():
+    df = None
+    # قائمة بالتشفيرات المحتملة للملفات العربية
+    encodings_to_try = ['utf-8', 'utf-8-sig', 'windows-1256', 'iso-8859-6']
+    
+    for encoding in encodings_to_try:
+        try:
+            # نحاول قراءة الملف
+            df = pd.read_csv("data.csv", encoding=encoding)
+            # إذا نجحت القراءة، نوقف المحاولات
+            break
+        except UnicodeDecodeError:
+            continue
+        except Exception as e:
+            st.error(f"حدث خطأ غير متوقع: {e}")
+            return None
+            
+    if df is None:
+        st.error("فشل قراءة الملف بجميع الترميزات المعروفة. يرجى التأكد من حفظ الملف بصيغة CSV UTF-8")
+        return None
+
     try:
-        # قراءة الملف - يرجى التأكد من أن اسم الملف هنا مطابق لاسم الملف بجانب الكود
-        # يفضل تغيير اسم ملف الاكسل إلى data.csv لسهولة القراءة
-        df = pd.read_csv("data.csv") 
-        
         # تنظيف أسماء الأعمدة
         df.columns = df.columns.str.replace('\n', ' ').str.strip()
         
         # تحويل رقم الهوية إلى نص
         if 'رقم الهوية' in df.columns:
             df['رقم الهوية'] = df['رقم الهوية'].astype(str).str.replace('.0', '', regex=False)
-        
+            
         return df
     except Exception as e:
-        st.error(f"حدث خطأ أثناء تحميل ملف البيانات. تأكد أن اسم الملف هو data.csv: {e}")
+        st.error(f"حدث خطأ أثناء معالجة البيانات: {e}")
         return None
 
 df = load_data()
@@ -165,4 +181,5 @@ st.markdown("""
         جميع الحقوق محفوظة لمجلس عائلة الأسطل © 2025<br>
         تم إنشاء وتطوير هذا الموقع بواسطة: <strong style="color:#004d00;">السيد قصي صبحي الأسطل</strong>
     </div>
+
     """, unsafe_allow_html=True)
