@@ -1,344 +1,0 @@
-import streamlit as st
-import pandas as pd
-from PIL import Image
-import os
-import re
-
-# --- إعدادات الصفحة ---
-st.set_page_config(
-    page_title="مجلس عائلة الأسطل - نظام البحث",
-    page_icon="🔍",
-    layout="wide", # استخدام الـ layout الواسع ليناسب العمودين
-    initial_sidebar_state="collapsed"
-)
-
-# --- دالة تحميل ومعالجة البيانات ---
-@st.cache_data
-def load_data():
-    """
-    تحميل الملف النهائي (data.xlsx أو data.csv) والاعتماد على هيكلية الأعمدة الـ 7 الجديدة.
-    """
-    df = None
-    file_found = False
-    
-    # محاولة القراءة من ملف Excel أو CSV
-    file_path = "data.xlsx" if os.path.exists("data.xlsx") else "data.csv"
-    
-    if os.path.exists(file_path):
-        try:
-            if file_path.endswith('.xlsx'):
-                df = pd.read_excel(file_path, engine='openpyxl', header=0)
-            else:
-                encodings = ['utf-8', 'utf-8-sig', 'windows-1256', 'iso-8859-6']
-                for enc in encodings:
-                    try:
-                        df = pd.read_csv(file_path, encoding=enc, on_bad_lines='skip', engine='python', header=0)
-                        break
-                    except:
-                        continue
-            file_found = True
-        except Exception:
-            pass
-    
-    if df is None or not file_found:
-        st.error("❌ لم يتم العثور على ملف البيانات (data.xlsx أو data.csv) أو تعذرت قراءته.")
-        return None
-
-    try:
-        # تنظيف شامل لإزالة المسافات والأسطر الجديدة من جميع أسماء الأعمدة
-        df.columns = df.columns.astype(str).str.replace('\n', ' ').str.strip()
-
-        # قائمة الأعمدة المطلوبة بالترتيب الدقيق لملفك النهائي
-        required_cols = [
-            "رقم الهوية", 
-            "الاسم", 
-            "رقم الهاتف", 
-            "الحالة الاجتماعية", 
-            "عدد الافراد", 
-            "هوية الزوجة", 
-            "اسم الزوجة"
-        ]
-
-        # اختيار الأعمدة المطلوبة فقط
-        df_processed = df[[col for col in required_cols if col in df.columns]]
-        
-        # التأكد من تحويل رقم الهوية إلى نص وإزالة أي فواصل عشرية (.0) والفراغات
-        if 'رقم الهوية' in df_processed.columns:
-            df_processed['رقم الهوية'] = df_processed['رقم الهوية'].astype(str).str.replace('.0', '', regex=False).str.strip()
-            
-        return df_processed
-
-    except Exception as e:
-        st.error(f"حدث خطأ أثناء معالجة البيانات داخلياً: {e}. يرجى التأكد من أن الأعمدة السبعة موجودة.")
-        return None
-
-df = load_data()
-
-# --- دالة التحقق من رقم الهوية ---
-def validate_id(id_string):
-    """التحقق من رقم الهوية بناءً على شروطك (9 خانات وأرقام إنجليزية فقط)."""
-    if not id_string:
-        return True, None # يسمح بالخانة الفارغة في البداية
-        
-    # 1. التحقق من الأرقام الإنجليزية فقط
-    if not re.fullmatch(r'[0-9]+', id_string):
-        return False, "⚠️ إدخال خاطئ - يجب إدخال أرقام إنجليزية (0-9) فقط"
-        
-    # 2. التحقق من عدد الخانات
-    if len(id_string) != 9:
-        return False, "⚠️ عدد أرقام غير صحيح - الرقم المدخل يجب أن يتكون من 9 خانات بالضبط"
-
-    return True, "✓ إدخال صحيح"
-
-
-# --- تصميم الواجهة (RTL & الخلفية) ---
-st.markdown("""
-    <style>
-    /* تغيير اتجاه النصوص والمحتوى بالكامل */
-    .main { direction: rtl; text-align: right; }
-    h1, h2, h3, h4, p, div, input, label, 
-    .stTextInput > label, div[data-testid="stCaptionContainer"], 
-    table, th, td {
-        font-family: 'Inter', 'Tahoma', 'Arial', sans-serif;
-        text-align: right;
-    }
-    /* تأثير الشعار كخلفية */
-    body {
-        background-image: url("data:image/jpeg;base64,{logo_base64}");
-        background-size: cover;
-        background-attachment: fixed;
-        background-position: center;
-        opacity: 0.1; /* شفافية خفيفة للشعار */
-    }
-    /* جعل المحتوى فوق الخلفية مرئياً */
-    .stApp {
-        background-color: rgba(255, 255, 255, 0.95); /* خلفية بيضاء شبه شفافة للمحتوى */
-        border-radius: 12px;
-        padding: 20px;
-    }
-    .footer {
-        font-size: 14px;
-        text-align: center;
-        padding: 10px;
-        color: #555;
-    }
-    .stAlert { direction: rtl; text-align: right; }
-    .stAlert > div { background-color: #f7f7f7 !important; border-right: 4px solid #cc0000; }
-    
-    /* تنسيق خاص لأقسام الإرشادات */
-    .guidance-box {
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        padding: 15px;
-        margin-bottom: 15px;
-        border-right: 4px solid #004d00;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    .guidance-title {
-        color: #004d00;
-        font-weight: bold;
-        margin-bottom: 10px;
-    }
-    .step {
-        display: flex;
-        align-items: center;
-        margin-bottom: 8px;
-    }
-    .step-number {
-        background-color: #004d00;
-        color: white;
-        border-radius: 50%;
-        width: 25px;
-        height: 25px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        font-size: 14px;
-        margin-left: 10px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- تحويل الشعار إلى Base64 للخلفية (تجنب مشكلة المسارات في Streamlit) ---
-logo_base64 = ""
-logo_path = "logo.jpg"
-if os.path.exists(logo_path):
-    try:
-        with open(logo_path, "rb") as f:
-            logo_base64 = base64.b64encode(f.read()).decode('utf-8')
-        st.markdown(f"""
-            <style>
-            .stApp {{
-                background-image: url('data:image/jpeg;base64,{logo_base64}');
-                background-size: cover;
-                background-position: center;
-                background-repeat: no-repeat;
-                background-attachment: fixed;
-            }}
-            .main {{
-                background-color: rgba(255, 255, 255, 0.9); /* خلفية بيضاء خفيفة للمحتوى */
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 0 0 15px rgba(0,0,0,0.1);
-            }}
-            </style>
-            """, unsafe_allow_html=True)
-    except Exception:
-        pass
-
-
-# --- تقسيم الشاشة إلى عمودين (للبحث والنصوص التعريفية) ---
-# عمود البحث (يمين) وعمود المعلومات (يسار)
-col_search, col_info = st.columns([5, 7])
-
-
-# =========================================================
-# --- العمود الأيمن: نظام البحث وعرض النتائج ---
-# =========================================================
-with col_search:
-    
-    # --- الترويسة ---
-    st.image(logo_path, width=80) # شعار صغير في واجهة البحث
-    st.markdown("## 🔍 خدمة الاستعلام عن بيانات أفراد العائلة")
-    st.markdown("---")
-
-    # --- خانة البحث ---
-    with st.form(key='search_form'):
-        st.markdown("#### **أدخل رقم الهوية (9 خانات إنجليزية) للبحث:**")
-        id_query = st.text_input("رقم الهوية", placeholder="مثال: 80xxxxxxx", max_chars=9, key='id_input').strip()
-        search_button = st.form_submit_button(label="بحث في قاعدة البيانات")
-
-    # --- معالجة نتيجة البحث والتحقق (Validation) ---
-    if search_button and df is not None:
-        is_valid, validation_message = validate_id(id_query)
-        
-        if not is_valid:
-            # رسالة خطأ التحقق
-            st.warning(validation_message)
-        else:
-            # بحث سليم
-            result = df[df['رقم الهوية'] == id_query]
-            
-            if not result.empty:
-                st.success("✅ تم العثور على السجل")
-                row = result.iloc[0]
-                
-                # تعيين أسماء العرض للواجهة
-                display_cols_mapping = {
-                    "رقم الهوية": "رقم الهوية",
-                    "الاسم": "الاسم الرباعي",
-                    "رقم الهاتف": "رقم الموبايل",
-                    "الحالة الاجتماعية": "الحالة الاجتماعية",
-                    "عدد الافراد": "عدد أفراد الأسرة",
-                    "هوية الزوجة": "هوية الزوج/ة",
-                    "اسم الزوجة": "اسم الزوج/ة"
-                }
-                
-                display_data = {}
-                missing_fields = []
-                required = ["الاسم", "رقم الهاتف", "الحالة الاجتماعية", "عدد الافراد"]
-
-                for col_db, col_show in display_cols_mapping.items():
-                    if col_db in df.columns:
-                        val = row[col_db]
-                        
-                        # استبدال القيم الفارغة
-                        display_value = "غير متوفر / ناقص" 
-                        if not pd.isna(val) and str(val).strip() != "" and str(val).strip().lower() != "nan":
-                            display_value = str(val).strip()
-                            
-                        display_data[col_show] = display_value
-                        
-                        # فحص النواقص
-                        if col_db in required and (pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan"):
-                            missing_fields.append(col_show)
-
-                st.table(pd.DataFrame(display_data.items(), columns=['البيان', 'القيمة']))
-
-                if missing_fields:
-                    st.markdown(f"""
-                    <div style="background-color: #fff0f0; padding: 15px; border-radius: 8px; border-right: 5px solid #ff3333; margin-top: 15px;">
-                        <h4 style="color: #cc0000; margin:0;">⚠️ بيانات ناقصة!</h4>
-                        <p>يرجى استكمال: <b>{', '.join(missing_fields)}</b></p>
-                        <hr>
-                        <p>يرجى التواصل مع مندوب الفرع لتحديث البيانات الصحيحة والكاملة.</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.info("✨ جميع البيانات الأساسية مكتملة لهذا السجل.")
-            else:
-                st.error(f"❌ لم يتم العثور على أي سجل برقم الهوية: {id_query}")
-
-
-# =========================================================
-# --- العمود الأيسر: النصوص التعريفية والإرشادات ---
-# =========================================================
-with col_info:
-    
-    st.markdown("## أهلاً وسهلاً بكم في صفحة استعلام أفراد عائلة الأسطل")
-    
-    st.markdown("""
-        نرحب بكم في البوابة الإلكترونية الرسمية لعائلة الأسطل، حيث تم إنشاء هذه الصفحة تحت الإشراف المباشر لمجلس عائلة الأسطل الموقر. تأتي هذه المبادرة في إطار حرص المجلس على توثيق وحفظ بيانات أفراد العائلة الكريمة، وتسهيل عملية الوصول إلى المعلومات بطريقة آمنة وسريعة.
-        
-        تهدف هذه المنصة إلى تعزيز الروابط الأسرية وتوفير قاعدة بيانات شاملة تخدم جميع أفراد العائلة.
-        """)
-    
-    st.markdown("### 💡 إرشادات إدخال رقم الهوية")
-    
-    # --- إرشادات الإدخال ---
-    st.markdown("""
-    <div class="guidance-box">
-        <div class="step">
-            <span class="step-number">01</span>
-            التأكد من عدد الأرقام: يجب أن يتكون رقم الهوية من **تسعة أرقام فقط**.
-        </div>
-        <div class="step">
-            <span class="step-number">02</span>
-            استخدام الأرقام الإنجليزية: يجب كتابة الأرقام باستخدام **الأرقام الإنجليزية (0-9)** فقط.
-        </div>
-        <div class="step">
-            <span class="step-number">03</span>
-            عدم إدخال حروف أو رموز: يجب أن يحتوي الإدخال على أرقام فقط.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # --- تحديث البيانات والأمان ---
-    st.markdown("### تحديث البيانات والأمان")
-    
-    st.markdown("""
-        يحرص مجلس عائلة الأسطل على الحفاظ على دقة وحداثة المعلومات. إذا لاحظتم وجود حقول **فارغة** أو معلومات **ناقصة**:
-        
-        * **كيفية التحديث:** يرجى إرسال البيانات الصحيحة والكاملة إلى **مندوب الفرع**، وسيقوم فريق مجلس العائلة بمراجعة المعلومات وتحديثها.
-        
-        * **الأمان والخصوصية:** جميع البيانات المخزنة محمية بأحدث تقنيات التشفير. الاستعلام متاح فقط لأفراد العائلة، ولا يتم مشاركة أي معلومات مع جهات خارجية.
-        """)
-    
-    # --- معلومات التواصل ---
-    st.markdown("---")
-    st.markdown("#### فريق التطوير والحقوق")
-    st.markdown(f"""
-        تم تصميم وتطوير هذا الموقع بجهود متميزة من: **أ. قصي صبحي الأسطل**
-        
-        **© جميع الحقوق محفوظة لمجلس عائلة الأسطل - 2025**
-        """)
-    
-# --- الفوتر (حقوق الملكية) ---
-st.markdown("<br><br>", unsafe_allow_html=True)
-st.markdown("""
-    <div class="footer">
-        لأي استفسارات أو مقترحات، يرجى التواصل مع مجلس العائلة من خلال القنوات الرسمية المعتمدة.
-    </div>
-    """, unsafe_allow_html=True)
-
-# يجب تضمين مكتبة base64 في الـ requirements.txt
-try:
-    import base64
-except ImportError:
-    st.warning("يرجى إضافة base64 إلى ملف requirements.txt.")
-
-# يجب تضمين مكتبة re في الـ requirements.txt
-try:
-    import re
-except ImportError:
-    st.warning("يرجى إضافة re إلى ملف requirements.txt.")
