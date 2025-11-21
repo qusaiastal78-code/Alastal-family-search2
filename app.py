@@ -3,6 +3,7 @@ import pandas as pd
 from PIL import Image
 import os
 import re
+import base64 # تم نقل الاستيراد للأعلى لضمان التوفر
 
 # --- إعدادات الصفحة ---
 st.set_page_config(
@@ -41,7 +42,7 @@ def load_data():
             pass
     
     if df is None or not file_found:
-        st.error("❌ لم يتم العثور على ملف البيانات (data.xlsx أو data.csv) أو تعذرت قراءته.")
+        # لا يتم عرض رسالة الخطأ هنا، بل في واجهة المستخدم
         return None
 
     try:
@@ -81,111 +82,120 @@ def validate_id(id_string):
         return True, None # يسمح بالخانة الفارغة في البداية
         
     # 1. التحقق من الأرقام الإنجليزية فقط
-    if not re.fullmatch(r'[0-9]+', id_string):
+    # re.fullmatch(r'\d+', id_string) أسرع للتحقق من الأرقام الإنجليزية فقط
+    if not re.fullmatch(r'\d+', id_string): 
+        # رسالة التنبيه لطلب استخدام الأرقام الإنجليزية
+        # تم تعديل الرسالة لتكون مطابقة لطلبك: "الإدخال خاطئ - يجب إدخال أرقام إنجليزية فقط"
         return False, "⚠️ إدخال خاطئ - يجب إدخال أرقام إنجليزية (0-9) فقط"
         
     # 2. التحقق من عدد الخانات
     if len(id_string) != 9:
+        # رسالة التنبيه لعدد الأرقام
         return False, "⚠️ عدد أرقام غير صحيح - الرقم المدخل يجب أن يتكون من 9 خانات بالضبط"
 
     return True, "✓ إدخال صحيح"
 
-
-# --- تصميم الواجهة (RTL & الخلفية) ---
-st.markdown("""
-    <style>
-    /* تغيير اتجاه النصوص والمحتوى بالكامل */
-    .main { direction: rtl; text-align: right; }
-    h1, h2, h3, h4, p, div, input, label, 
-    .stTextInput > label, div[data-testid="stCaptionContainer"], 
-    table, th, td {
-        font-family: 'Inter', 'Tahoma', 'Arial', sans-serif;
-        text-align: right;
-    }
-    /* تأثير الشعار كخلفية */
-    body {
-        background-image: url("data:image/jpeg;base64,{logo_base64}");
-        background-size: cover;
-        background-attachment: fixed;
-        background-position: center;
-        opacity: 0.1; /* شفافية خفيفة للشعار */
-    }
-    /* جعل المحتوى فوق الخلفية مرئياً */
-    .stApp {
-        background-color: rgba(255, 255, 255, 0.95); /* خلفية بيضاء شبه شفافة للمحتوى */
-        border-radius: 12px;
-        padding: 20px;
-    }
-    .footer {
-        font-size: 14px;
-        text-align: center;
-        padding: 10px;
-        color: #555;
-    }
-    .stAlert { direction: rtl; text-align: right; }
-    .stAlert > div { background-color: #f7f7f7 !important; border-right: 4px solid #cc0000; }
-    
-    /* تنسيق خاص لأقسام الإرشادات */
-    .guidance-box {
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        padding: 15px;
-        margin-bottom: 15px;
-        border-right: 4px solid #004d00;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    .guidance-title {
-        color: #004d00;
-        font-weight: bold;
-        margin-bottom: 10px;
-    }
-    .step {
-        display: flex;
-        align-items: center;
-        margin-bottom: 8px;
-    }
-    .step-number {
-        background-color: #004d00;
-        color: white;
-        border-radius: 50%;
-        width: 25px;
-        height: 25px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        font-size: 14px;
-        margin-left: 10px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- تحويل الشعار إلى Base64 للخلفية (تجنب مشكلة المسارات في Streamlit) ---
+# --- تحويل الشعار إلى Base64 للخلفية (لضمان التغطية الكاملة والشفافية) ---
 logo_base64 = ""
 logo_path = "logo.jpg"
 if os.path.exists(logo_path):
     try:
         with open(logo_path, "rb") as f:
             logo_base64 = base64.b64encode(f.read()).decode('utf-8')
-        st.markdown(f"""
-            <style>
-            .stApp {{
-                background-image: url('data:image/jpeg;base64,{logo_base64}');
-                background-size: cover;
-                background-position: center;
-                background-repeat: no-repeat;
-                background-attachment: fixed;
-            }}
-            .main {{
-                background-color: rgba(255, 255, 255, 0.9); /* خلفية بيضاء خفيفة للمحتوى */
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 0 0 15px rgba(0,0,0,0.1);
-            }}
-            </style>
-            """, unsafe_allow_html=True)
     except Exception:
         pass
 
+
+# --- تصميم الواجهة (RTL & الخلفية) ---
+# استخدام متغير بايثون لتضمين الشعار في CSS لتطبيق الخلفية على كامل الصفحة
+css_background = ""
+if logo_base64:
+    # تعديل الـ CSS ليغطي الشعار كامل الصفحة ولا يتكرر، مع شفافية خفيفة جداً (0.05)
+    css_background = f"""
+        <style>
+        .stApp {{
+            background-image: url('data:image/jpeg;base64,{logo_base64}');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            opacity: 1; /* إبقاء التطبيق نفسه مرئياً */
+        }}
+        /* تطبيق طبقة شبه شفافة على المحتوى لتكون النصوص واضحة على خلفية الشعار */
+        .main, .block-container {{
+            background-color: rgba(255, 255, 255, 0.95); 
+            border-radius: 12px;
+            padding: 20px;
+            z-index: 10; 
+        }}
+        .main .block-container {{
+            padding-top: 2rem;
+        }}
+        </style>
+    """
+else:
+    # في حال عدم وجود شعار، فقط تأكيد الخلفية البيضاء للمحتوى
+    css_background = """
+        <style>
+        .main, .block-container {
+            background-color: white; 
+            border-radius: 12px;
+            padding: 20px;
+        }
+        </style>
+    """
+
+# إضافة خطوط عربية حديثة وتحسين التباين
+st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+    
+    /* تغيير اتجاه النصوص والمحتوى بالكامل */
+    .main {{ direction: rtl; text-align: right; }}
+    h1, h2, h3, h4, p, div, input, label, 
+    .stTextInput > label, div[data-testid="stCaptionContainer"], 
+    table, th, td {{
+        font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; /* استخدام خط Cairo */
+        text-align: right;
+        color: #333; /* لون نص داكن لزيادة الوضوح */
+    }}
+    h1 {{ color: #004d00; font-weight: 700; }}
+    h2 {{ color: #004d00; border-bottom: 2px solid #eee; padding-bottom: 5px; }}
+    
+    /* تنسيق خاص لأقسام الإرشادات */
+    .guidance-box {{
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-right: 4px solid #004d00;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }}
+    .step-number {{
+        background-color: #004d00;
+        color: white;
+        border-radius: 50%;
+        width: 28px; /* زيادة حجم الرقم */
+        height: 28px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 16px;
+        margin-left: 10px;
+    }}
+    .footer {{
+        font-size: 14px;
+        text-align: center;
+        padding: 10px;
+        color: #555;
+    }}
+    .stAlert > div {{ background-color: #f7f7f7 !important; border-right: 4px solid #cc0000; }}
+    </style>
+    {css_background}
+    """, unsafe_allow_html=True)
+
+if df is None:
+     st.error("❌ لم يتم العثور على ملف البيانات (data.xlsx أو data.csv) أو تعذرت قراءته. يرجى التأكد من تسمية الملف بشكل صحيح.")
 
 # --- تقسيم الشاشة إلى عمودين (للبحث والنصوص التعريفية) ---
 # عمود البحث (يمين) وعمود المعلومات (يسار)
@@ -198,21 +208,44 @@ col_search, col_info = st.columns([5, 7])
 with col_search:
     
     # --- الترويسة ---
-    st.image(logo_path, width=80) # شعار صغير في واجهة البحث
-    st.markdown("## 🔍 خدمة الاستعلام عن بيانات أفراد العائلة")
+    if os.path.exists(logo_path):
+        st.image(logo_path, width=80) # شعار صغير في واجهة البحث
+    st.markdown("## 🔍 **خدمة الاستعلام عن بيانات أفراد العائلة**")
     st.markdown("---")
 
     # --- خانة البحث ---
     with st.form(key='search_form'):
         st.markdown("#### **أدخل رقم الهوية (9 خانات إنجليزية) للبحث:**")
-        id_query = st.text_input("رقم الهوية", placeholder="مثال: 80xxxxxxx", max_chars=9, key='id_input').strip()
-        search_button = st.form_submit_button(label="بحث في قاعدة البيانات")
+        # تم تعيين key='id_input_search' لتجنب التداخل مع أي استخدام مستقبلي
+        id_query = st.text_input("رقم الهوية", placeholder="مثال: 80xxxxxxx", max_chars=9, key='id_input_search').strip() 
+        
+        # تحسين شكل زر البحث
+        st.markdown("""
+        <style>
+            div.stButton > button:first-child {
+                background-color: #004d00;
+                color: white;
+                border-radius: 8px;
+                padding: 10px 20px;
+                font-weight: bold;
+                transition: all 0.2s ease-in-out;
+            }
+            div.stButton > button:first-child:hover {
+                background-color: #006600;
+                transform: scale(1.02);
+            }
+        </style>
+        """, unsafe_allow_html=True)
+        search_button = st.form_submit_button(label="🔍 بحث في قاعدة البيانات")
+
 
     # --- معالجة نتيجة البحث والتحقق (Validation) ---
     if search_button and df is not None:
         is_valid, validation_message = validate_id(id_query)
         
-        if not is_valid:
+        if not id_query:
+            st.warning("الرجاء إدخال رقم الهوية للبدء بالبحث.")
+        elif not is_valid:
             # رسالة خطأ التحقق
             st.warning(validation_message)
         else:
@@ -253,21 +286,23 @@ with col_search:
                         if col_db in required and (pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan"):
                             missing_fields.append(col_show)
 
+                # عرض النتائج في جدول أنيق
+                st.markdown("#### **صفحة النتائج - عرض البيانات التفصيلية:**")
                 st.table(pd.DataFrame(display_data.items(), columns=['البيان', 'القيمة']))
 
                 if missing_fields:
                     st.markdown(f"""
                     <div style="background-color: #fff0f0; padding: 15px; border-radius: 8px; border-right: 5px solid #ff3333; margin-top: 15px;">
-                        <h4 style="color: #cc0000; margin:0;">⚠️ بيانات ناقصة!</h4>
+                        <h4 style="color: #cc0000; margin:0;">⚠️ تنبيه: بيانات ناقصة!</h4>
                         <p>يرجى استكمال: <b>{', '.join(missing_fields)}</b></p>
                         <hr>
-                        <p>يرجى التواصل مع مندوب الفرع لتحديث البيانات الصحيحة والكاملة.</p>
+                        <p>يرجى التواصل مع **مندوب الفرع** لتحديث البيانات الصحيحة والكاملة.</p>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
                     st.info("✨ جميع البيانات الأساسية مكتملة لهذا السجل.")
             else:
-                st.error(f"❌ لم يتم العثور على أي سجل برقم الهوية: {id_query}")
+                st.error(f"❌ لم يتم العثور على أي سجل برقم الهوية: **{id_query}**")
 
 
 # =========================================================
@@ -275,22 +310,23 @@ with col_search:
 # =========================================================
 with col_info:
     
-    st.markdown("## أهلاً وسهلاً بكم في صفحة استعلام أفراد عائلة الأسطل")
+    st.markdown("## **أهلاً وسهلاً بكم في صفحة استعلام أفراد عائلة الأسطل**")
     
     st.markdown("""
-        نرحب بكم في البوابة الإلكترونية الرسمية لعائلة الأسطل، حيث تم إنشاء هذه الصفحة تحت الإشراف المباشر لمجلس عائلة الأسطل الموقر. تأتي هذه المبادرة في إطار حرص المجلس على توثيق وحفظ بيانات أفراد العائلة الكريمة، وتسهيل عملية الوصول إلى المعلومات بطريقة آمنة وسريعة.
+        نرحب بكم في البوابة الإلكترونية الرسمية لعائلة الأسطل، حيث تم إنشاء هذه الصفحة تحت الإشراف المباشر **لمجلس عائلة الأسطل الموقر**. تأتي هذه المبادرة في إطار حرص المجلس على **توثيق وحفظ بيانات أفراد العائلة الكريمة**، وتسهيل عملية الوصول إلى المعلومات بطريقة آمنة وسريعة.
         
-        تهدف هذه المنصة إلى تعزيز الروابط الأسرية وتوفير قاعدة بيانات شاملة تخدم جميع أفراد العائلة.
+        تهدف هذه المنصة إلى تعزيز الروابط الأسرية وتوفير قاعدة بيانات شاملة تخدم جميع أفراد العائلة. نسعى من خلال هذه الخدمة إلى تحقيق التواصل الفعال بين أفراد العائلة وتوفير المعلومات الضرورية.
         """)
     
-    st.markdown("### 💡 إرشادات إدخال رقم الهوية")
+    st.markdown("---")
+    st.markdown("### 💡 **إرشادات إدخال رقم الهوية**")
     
     # --- إرشادات الإدخال ---
     st.markdown("""
     <div class="guidance-box">
         <div class="step">
             <span class="step-number">01</span>
-            التأكد من عدد الأرقام: يجب أن يتكون رقم الهوية من **تسعة أرقام فقط**.
+            التأكد من عدد الأرقام: يجب أن يتكون رقم الهوية من **تسعة أرقام فقط**، لا أقل ولا أكثر.
         </div>
         <div class="step">
             <span class="step-number">02</span>
@@ -304,7 +340,7 @@ with col_info:
     """, unsafe_allow_html=True)
 
     # --- تحديث البيانات والأمان ---
-    st.markdown("### تحديث البيانات والأمان")
+    st.markdown("### **تحديث البيانات والأمان**")
     
     st.markdown("""
         يحرص مجلس عائلة الأسطل على الحفاظ على دقة وحداثة المعلومات. إذا لاحظتم وجود حقول **فارغة** أو معلومات **ناقصة**:
@@ -316,7 +352,7 @@ with col_info:
     
     # --- معلومات التواصل ---
     st.markdown("---")
-    st.markdown("#### فريق التطوير والحقوق")
+    st.markdown("#### **فريق التطوير والحقوق**")
     st.markdown(f"""
         تم تصميم وتطوير هذا الموقع بجهود متميزة من: **أ. قصي صبحي الأسطل**
         
@@ -330,15 +366,3 @@ st.markdown("""
         لأي استفسارات أو مقترحات، يرجى التواصل مع مجلس العائلة من خلال القنوات الرسمية المعتمدة.
     </div>
     """, unsafe_allow_html=True)
-
-# يجب تضمين مكتبة base64 في الـ requirements.txt
-try:
-    import base64
-except ImportError:
-    st.warning("يرجى إضافة base64 إلى ملف requirements.txt.")
-
-# يجب تضمين مكتبة re في الـ requirements.txt
-try:
-    import re
-except ImportError:
-    st.warning("يرجى إضافة re إلى ملف requirements.txt.")
