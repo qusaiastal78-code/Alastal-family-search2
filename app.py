@@ -3,7 +3,7 @@ import pandas as pd
 from PIL import Image
 import os
 import re
-import base64 # تم نقل الاستيراد للأعلى لضمان التوفر
+import base64 
 
 # --- إعدادات الصفحة ---
 st.set_page_config(
@@ -28,6 +28,7 @@ def load_data():
     if os.path.exists(file_path):
         try:
             if file_path.endswith('.xlsx'):
+                # تأكد من استخدام header=0 للقراءة الصحيحة للصف الأول كعنوان
                 df = pd.read_excel(file_path, engine='openpyxl', header=0)
             else:
                 encodings = ['utf-8', 'utf-8-sig', 'windows-1256', 'iso-8859-6']
@@ -42,7 +43,6 @@ def load_data():
             pass
     
     if df is None or not file_found:
-        # لا يتم عرض رسالة الخطأ هنا، بل في واجهة المستخدم
         return None
 
     try:
@@ -50,6 +50,7 @@ def load_data():
         df.columns = df.columns.astype(str).str.replace('\n', ' ').str.strip()
 
         # قائمة الأعمدة المطلوبة بالترتيب الدقيق لملفك النهائي
+        # يجب التأكد من تطابق هذه الأسماء مع العناوين في ملف البيانات
         required_cols = [
             "رقم الهوية", 
             "الاسم", 
@@ -65,7 +66,7 @@ def load_data():
         
         # التأكد من تحويل رقم الهوية إلى نص وإزالة أي فواصل عشرية (.0) والفراغات
         if 'رقم الهوية' in df_processed.columns:
-            df_processed['رقم الهوية'] = df_processed['رقم الهوية'].astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_processed['رقم الهوية'] = df_processed['رقم الهوية'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
             
         return df_processed
 
@@ -79,18 +80,12 @@ df = load_data()
 def validate_id(id_string):
     """التحقق من رقم الهوية بناءً على شروطك (9 خانات وأرقام إنجليزية فقط)."""
     if not id_string:
-        return True, None # يسمح بالخانة الفارغة في البداية
+        return True, None
         
-    # 1. التحقق من الأرقام الإنجليزية فقط
-    # re.fullmatch(r'\d+', id_string) أسرع للتحقق من الأرقام الإنجليزية فقط
     if not re.fullmatch(r'\d+', id_string): 
-        # رسالة التنبيه لطلب استخدام الأرقام الإنجليزية
-        # تم تعديل الرسالة لتكون مطابقة لطلبك: "الإدخال خاطئ - يجب إدخال أرقام إنجليزية فقط"
         return False, "⚠️ إدخال خاطئ - يجب إدخال أرقام إنجليزية (0-9) فقط"
         
-    # 2. التحقق من عدد الخانات
     if len(id_string) != 9:
-        # رسالة التنبيه لعدد الأرقام
         return False, "⚠️ عدد أرقام غير صحيح - الرقم المدخل يجب أن يتكون من 9 خانات بالضبط"
 
     return True, "✓ إدخال صحيح"
@@ -106,63 +101,62 @@ if os.path.exists(logo_path):
         pass
 
 
-# --- تصميم الواجهة (RTL & الخلفية) ---
-# استخدام متغير بايثون لتضمين الشعار في CSS لتطبيق الخلفية على كامل الصفحة
+# --- تصميم الواجهة (RTL & الخلفية) - تجميع كل أكواد CSS هنا ---
 css_background = ""
 if logo_base64:
-    # تعديل الـ CSS ليغطي الشعار كامل الصفحة ولا يتكرر، مع شفافية خفيفة جداً (0.05)
+    # تطبيق الشعار كخلفية لـ .stApp مع تغطية كاملة وشفافية خفيفة جداً (0.05)
+    # تم استخدام linear-gradient لزيادة وضوح النص فوق الشعار
     css_background = f"""
-        <style>
         .stApp {{
-            background-image: url('data:image/jpeg;base64,{logo_base64}');
+            /* الخلفية الأساسية (طبقة اللون الأبيض الشفاف + صورة الشعار) */
+            background-image: linear-gradient(rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.95)), 
+                              url('data:image/jpeg;base64,{logo_base64}');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
             background-attachment: fixed;
-            opacity: 1; /* إبقاء التطبيق نفسه مرئياً */
         }}
-        /* تطبيق طبقة شبه شفافة على المحتوى لتكون النصوص واضحة على خلفية الشعار */
         .main, .block-container {{
-            background-color: rgba(255, 255, 255, 0.95); 
-            border-radius: 12px;
-            padding: 20px;
-            z-index: 10; 
+            background-color: transparent; /* إزالة الخلفية البيضاء من الحاوية لتقليل الطبقات */
         }}
-        .main .block-container {{
-            padding-top: 2rem;
-        }}
-        </style>
     """
 else:
-    # في حال عدم وجود شعار، فقط تأكيد الخلفية البيضاء للمحتوى
-    css_background = """
-        <style>
-        .main, .block-container {
-            background-color: white; 
-            border-radius: 12px;
-            padding: 20px;
-        }
-        </style>
-    """
+    # في حال عدم وجود شعار، خلفية بيضاء ثابتة
+    css_background = ".stApp { background-color: white; }"
 
-# إضافة خطوط عربية حديثة وتحسين التباين
+# تجميع كل الأنماط في كتلة واحدة
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
     
-    /* تغيير اتجاه النصوص والمحتوى بالكامل */
-    .main {{ direction: rtl; text-align: right; }}
+    /* 1. تصميم الخلفية والشعار */
+    {css_background}
+    
+    /* 2. إخفاء النص غير المرغوب فيه في الأعلى (Streamlit decoration) */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+    .stDecoration {{display: none;}}
+
+    /* 3. تغيير اتجاه النصوص والمحتوى بالكامل و الخطوط */
+    .main {{ 
+        direction: rtl; 
+        text-align: right; 
+        font-family: 'Cairo', sans-serif;
+    }}
+    .block-container {{
+        padding-top: 2rem;
+    }}
     h1, h2, h3, h4, p, div, input, label, 
     .stTextInput > label, div[data-testid="stCaptionContainer"], 
     table, th, td {{
-        font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif; /* استخدام خط Cairo */
+        font-family: 'Cairo', 'Tahoma', 'Arial', sans-serif;
         text-align: right;
-        color: #333; /* لون نص داكن لزيادة الوضوح */
+        color: #333;
     }}
-    h1 {{ color: #004d00; font-weight: 700; }}
-    h2 {{ color: #004d00; border-bottom: 2px solid #eee; padding-bottom: 5px; }}
+    h1, h2, h3, h4 {{ color: #004d00; font-weight: 700; }}
     
-    /* تنسيق خاص لأقسام الإرشادات */
+    /* 4. تنسيق خاص لأقسام الإرشادات */
     .guidance-box {{
         background-color: #f8f9fa;
         border-radius: 8px;
@@ -175,7 +169,7 @@ st.markdown(f"""
         background-color: #004d00;
         color: white;
         border-radius: 50%;
-        width: 28px; /* زيادة حجم الرقم */
+        width: 28px; 
         height: 28px;
         display: flex;
         justify-content: center;
@@ -183,6 +177,21 @@ st.markdown(f"""
         font-size: 16px;
         margin-left: 10px;
     }}
+    /* تنسيق زر البحث */
+    div.stButton > button:first-child {{
+        background-color: #004d00;
+        color: white;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-weight: bold;
+        transition: all 0.2s ease-in-out;
+        width: 100%;
+    }}
+    div.stButton > button:first-child:hover {{
+        background-color: #006600;
+        transform: scale(1.02);
+    }}
+    
     .footer {{
         font-size: 14px;
         text-align: center;
@@ -191,7 +200,6 @@ st.markdown(f"""
     }}
     .stAlert > div {{ background-color: #f7f7f7 !important; border-right: 4px solid #cc0000; }}
     </style>
-    {css_background}
     """, unsafe_allow_html=True)
 
 if df is None:
@@ -209,33 +217,14 @@ with col_search:
     
     # --- الترويسة ---
     if os.path.exists(logo_path):
-        st.image(logo_path, width=80) # شعار صغير في واجهة البحث
+        st.image(logo_path, width=80)
     st.markdown("## 🔍 **خدمة الاستعلام عن بيانات أفراد العائلة**")
     st.markdown("---")
 
     # --- خانة البحث ---
     with st.form(key='search_form'):
         st.markdown("#### **أدخل رقم الهوية (9 خانات إنجليزية) للبحث:**")
-        # تم تعيين key='id_input_search' لتجنب التداخل مع أي استخدام مستقبلي
         id_query = st.text_input("رقم الهوية", placeholder="مثال: 80xxxxxxx", max_chars=9, key='id_input_search').strip() 
-        
-        # تحسين شكل زر البحث
-        st.markdown("""
-        <style>
-            div.stButton > button:first-child {
-                background-color: #004d00;
-                color: white;
-                border-radius: 8px;
-                padding: 10px 20px;
-                font-weight: bold;
-                transition: all 0.2s ease-in-out;
-            }
-            div.stButton > button:first-child:hover {
-                background-color: #006600;
-                transform: scale(1.02);
-            }
-        </style>
-        """, unsafe_allow_html=True)
         search_button = st.form_submit_button(label="🔍 بحث في قاعدة البيانات")
 
 
